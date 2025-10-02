@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "dist/intake/webhook.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "dist/intake/webhook.js"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
+}

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "nodemon src/intake/webhook.ts",
     "build": "tsc",
-    "start": "node dist/intake/webhook.js"
+    "start": "node dist/intake/webhook.js",
+    "vercel-build": "npm run build",
+    "deploy": "vercel --prod"
   },
   "keywords": [
     "ai",

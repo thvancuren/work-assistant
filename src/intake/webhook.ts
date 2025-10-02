@@ -12,6 +12,7 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "1mb" })); // JSON bodies
 app.use(express.urlencoded({ extended: true })); // form-encoded fallbacks
+app.use(express.static('public')); // Serve static files
 
 // --- Types for request payload (optional, for clarity) ---
 type IntakeBody = {
@@ -22,7 +23,7 @@ type IntakeBody = {
 
 // --- Health/diagnostics ---
 app.get("/", (_req, res) => {
-  res.type("text").send("work-assistant webhook is running.");
+  res.sendFile('index.html', { root: 'public' });
 });
 
 app.get("/health", (_req, res) => {

@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Work Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 16px;
+        }
+
+        .form-container {
+            padding: 30px 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 12px;
+            font-size: 16px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 120px;
+            transition: border-color 0.3s ease;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        select {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 12px;
+            font-size: 16px;
+            font-family: inherit;
+            background: white;
+            transition: border-color 0.3s ease;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 12px;
+            display: none;
+        }
+
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .result.show {
+            display: block;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .examples {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+        }
+
+        .examples h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .example {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            font-style: italic;
+            color: #666;
+        }
+
+        .task-url {
+            margin-top: 10px;
+        }
+
+        .task-url a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .task-url a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 Work Assistant</h1>
+            <p>Create tasks from natural language</p>
+        </div>
+
+        <div class="form-container">
+            <form id="taskForm">
+                <div class="form-group">
+                    <label for="taskText">Task Description</label>
+                    <textarea 
+                        id="taskText" 
+                        name="text" 
+                        placeholder="Describe your task in natural language...&#10;&#10;Examples:&#10;• Follow up with shipping by next Friday&#10;• Schedule team meeting for tomorrow&#10;• Review quarterly reports by end of month"
+                        required
+                    ></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="platform">Platform</label>
+                    <select id="platform" name="platform">
+                        <option value="">Auto-select (default)</option>
+                        <option value="asana">Asana</option>
+                        <option value="planner">Microsoft Planner</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn" id="submitBtn">
+                    Create Task
+                </button>
+            </form>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Creating your task...</p>
+            </div>
+
+            <div class="result" id="result">
+                <div id="resultContent"></div>
+            </div>
+
+            <div class="examples">
+                <h3>💡 Examples</h3>
+                <div class="example">"Follow up with shipping department by next Friday"</div>
+                <div class="example">"Remind me to call John tomorrow"</div>
+                <div class="example">"Schedule team meeting for next Monday"</div>
+                <div class="example">"Create task for reviewing quarterly reports by end of month"</div>
+                <div class="example">"Send invoice to client by Friday"</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('taskForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const data = {
+                text: formData.get('text'),
+                platform: formData.get('platform') || undefined
+            };
+
+            // Show loading state
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('result').classList.remove('show');
+            document.getElementById('submitBtn').disabled = true;
+
+            try {
+                const response = await fetch('/intake', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                
+                // Hide loading
+                document.getElementById('loading').classList.remove('show');
+                
+                // Show result
+                const resultDiv = document.getElementById('result');
+                const resultContent = document.getElementById('resultContent');
+                
+                if (result.ok) {
+                    resultDiv.className = 'result success show';
+                    resultContent.innerHTML = `
+                        <strong>✅ Task created successfully!</strong><br>
+                        <div class="task-url">
+                            <a href="${result.taskUrl}" target="_blank">View Task →</a>
+                        </div>
+                        <small>Created in ${result.backend}</small>
+                    `;
+                    
+                    // Clear form
+                    document.getElementById('taskText').value = '';
+                } else {
+                    resultDiv.className = 'result error show';
+                    resultContent.innerHTML = `
+                        <strong>❌ Error creating task</strong><br>
+                        ${result.error || 'Unknown error occurred'}
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('loading').classList.remove('show');
+                const resultDiv = document.getElementById('result');
+                const resultContent = document.getElementById('resultContent');
+                
+                resultDiv.className = 'result error show';
+                resultContent.innerHTML = `
+                    <strong>❌ Network Error</strong><br>
+                    Please check your connection and try again.
+                `;
+            } finally {
+                document.getElementById('submitBtn').disabled = false;
+            }
+        });
+
+        // Auto-resize textarea
+        const textarea = document.getElementById('taskText');
+        textarea.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = this.scrollHeight + 'px';
+        });
+    </script>
+</body>
+</html>
