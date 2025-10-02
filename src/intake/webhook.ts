@@ -1,144 +1,87 @@
-import express from 'express';
-import dotenv from 'dotenv';
-import { createWorkAssistantAgent } from '../agent';
+// src/intake/webhook.ts
+import express, { Request, Response } from "express";
+import dotenv from "dotenv";
+import cors from "cors";
+import { handleTextToTask } from "../agent";
 
-// Load environment variables
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// --- Middleware ---
+app.use(cors());
+app.use(express.json({ limit: "1mb" })); // JSON bodies
+app.use(express.urlencoded({ extended: true })); // form-encoded fallbacks
 
-// Initialize the agent
-let agent: ReturnType<typeof createWorkAssistantAgent>;
+// --- Types for request payload (optional, for clarity) ---
+type IntakeBody = {
+  text: string;        // required: the natural-language task description
+  platform?: "asana" | "planner";  // optional: which platform to use
+  source?: string;     // optional: "iOS Shortcut", "email", etc.
+};
 
-try {
-  agent = createWorkAssistantAgent();
-  console.log('Work Assistant Agent initialized successfully');
-} catch (error) {
-  console.error('Failed to initialize agent:', error);
-  process.exit(1);
-}
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  try {
-    const status = agent.getStatus();
-    res.json({
-      status: 'healthy',
-      agent: status,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    res.status(500).json({
-      status: 'unhealthy',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString(),
-    });
-  }
+// --- Health/diagnostics ---
+app.get("/", (_req, res) => {
+  res.type("text").send("work-assistant webhook is running.");
 });
 
-// Main intake endpoint
-app.post('/intake', async (req, res) => {
-  try {
-    const { text, platform } = req.body;
+app.get("/health", (_req, res) => {
+  const hasAsana = !!process.env.ASANA_TOKEN && !!process.env.ASANA_PROJECT;
+  const hasPlanner =
+    !!process.env.GRAPH_TOKEN &&
+    !!process.env.PLANNER_PLAN &&
+    !!process.env.PLANNER_BUCKET;
 
-    // Validate input
-    if (!text || typeof text !== 'string') {
-      return res.status(400).json({
-        error: 'Invalid input: "text" field is required and must be a string',
-        example: {
-          text: 'Follow up with shipping by next Friday',
-          platform: 'asana' // optional: 'asana' or 'planner'
-        }
-      });
+  res.json({
+    ok: true,
+    node: process.version,
+    asanaConfigured: hasAsana,
+    plannerConfigured: hasPlanner,
+  });
+});
+
+// --- Main intake endpoint ---
+app.post("/intake", async (req: Request, res: Response) => {
+  try {
+    const body = (req.body || {}) as IntakeBody;
+
+    if (!body.text || typeof body.text !== "string") {
+      return res.status(400).json({ ok: false, error: 'Missing required "text" in request body.' });
     }
 
-    console.log('Processing task request:', { text, platform });
+    // Call the agent helper (Route B)
+    const { text, platform, source } = body;
+    const out = await handleTextToTask(text, platform);
 
-    // Process the task request
-    const taskUrl = await agent.processTaskRequest(text, platform);
-
-    // Return success response
-    res.json({
-      success: true,
-      taskUrl,
-      message: 'Task created successfully',
-      timestamp: new Date().toISOString(),
+    // Standardize success payload
+    return res.json({
+      ok: true,
+      source: source ?? "webhook",
+      backend: out.backend,
+      taskUrl: out.taskUrl,
+      // raw: out.raw, // Uncomment for debugging, but avoid returning big objects in prod
     });
-
-  } catch (error) {
-    console.error('Error processing intake request:', error);
-    
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred',
-      timestamp: new Date().toISOString(),
+  } catch (err: any) {
+    console.error("[/intake] error:", err?.stack || err);
+    // Surface a helpful message while keeping details in logs
+    return res.status(500).json({
+      ok: false,
+      error: err?.message || "Internal error",
     });
   }
 });
 
-// Test endpoint
-app.post('/test', async (req, res) => {
-  try {
-    console.log('Running agent test...');
-    const testResult = await agent.testAgent();
-    
-    res.json({
-      success: true,
-      testResult,
-      message: 'Agent test completed successfully',
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error('Agent test failed:', error);
-    
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Test failed',
-      timestamp: new Date().toISOString(),
-    });
-  }
-});
-
-// Error handling middleware
-app.use((error: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Unhandled error:', error);
-  res.status(500).json({
-    success: false,
-    error: 'Internal server error',
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Endpoint not found',
-    availableEndpoints: [
-      'GET /health - Health check',
-      'POST /intake - Create task from natural language',
-      'POST /test - Test agent functionality'
-    ],
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// Start server
+// --- Boot the server ---
+const PORT = Number(process.env.PORT || 3000);
 app.listen(PORT, () => {
-  console.log(`🚀 Work Assistant server running on port ${PORT}`);
-  console.log(`📡 Health check: http://localhost:${PORT}/health`);
-  console.log(`📥 Intake endpoint: http://localhost:${PORT}/intake`);
-  console.log(`🧪 Test endpoint: http://localhost:${PORT}/test`);
-  console.log('');
-  console.log('Example usage:');
-  console.log(`curl -X POST http://localhost:${PORT}/intake \\`);
-  console.log('  -H "Content-Type: application/json" \\');
-  console.log('  -d \'{"text":"Follow up with shipping by next Friday"}\'');
+  console.log(`Webhook listening on http://localhost:${PORT}`);
+  const asanaReady = !!process.env.ASANA_TOKEN && !!process.env.ASANA_PROJECT;
+  const plannerReady =
+    !!process.env.GRAPH_TOKEN &&
+    !!process.env.PLANNER_PLAN &&
+    !!process.env.PLANNER_BUCKET;
+  console.log(`Asana configured: ${asanaReady} | Planner configured: ${plannerReady}`);
 });
 
+// (Optional) export app for unit/integration tests
 export default app;

@@ -73,7 +73,7 @@ export class AsanaTool {
         throw new Error(`Asana API error: ${response.status} - ${JSON.stringify(errorData)}`);
       }
 
-      const result: AsanaResponse<AsanaTask> = await response.json();
+      const result = await response.json() as AsanaResponse<AsanaTask>;
       const task = result.data;
 
       // Move task to section if specified
@@ -127,7 +127,7 @@ export class AsanaTool {
         throw new Error(`Failed to get project: ${response.status}`);
       }
 
-      const result: AsanaResponse<any> = await response.json();
+      const result = await response.json() as AsanaResponse<any>;
       return result.data;
     } catch (error) {
       console.error('Error getting Asana project:', error);
@@ -150,7 +150,7 @@ export class AsanaTool {
         throw new Error(`Failed to get project sections: ${response.status}`);
       }
 
-      const result: AsanaResponse<any[]> = await response.json();
+      const result = await response.json() as AsanaResponse<any[]>;
       return result.data;
     } catch (error) {
       console.error('Error getting Asana project sections:', error);

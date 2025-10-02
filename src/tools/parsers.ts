@@ -3,13 +3,13 @@ import { z } from 'zod';
 // Schema for task input validation
 export const TaskInputSchema = z.object({
   title: z.string().min(1, 'Title is required'),
-  description: z.string().optional(),
-  dueDate: z.string().optional(),
-  assignee: z.string().optional(),
-  project: z.string().optional(),
-  section: z.string().optional(),
-  links: z.array(z.string()).optional(),
-  attachments: z.array(z.string()).optional(),
+  description: z.string().nullable(),
+  dueDate: z.string().nullable(),
+  assignee: z.string().nullable(),
+  project: z.string().nullable(),
+  section: z.string().nullable(),
+  links: z.array(z.string()).nullable(),
+  attachments: z.array(z.string()).nullable(),
 });
 
 export type TaskInput = z.infer<typeof TaskInputSchema>;

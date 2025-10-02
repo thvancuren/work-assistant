@@ -1,48 +1,99 @@
-import { Agent } from '@openai/agents';
-import { createAsanaTool } from './tools/asana';
-import { createPlannerTool } from './tools/msgraph';
-import { parseTaskInput, TaskInput, TaskInputSchema } from './tools/parsers';
+import { Agent, tool, run } from "@openai/agents";
+import { z } from "zod";
+import dotenv from "dotenv";
+import { createAsanaTool } from "./tools/asana";
+import { createPlannerTool } from "./tools/msgraph";
+import { TaskInput, TaskInputSchema } from "./tools/parsers";
 
-interface AgentConfig {
-  openaiApiKey: string;
-  defaultPlatform?: 'asana' | 'planner';
+// Load environment variables
+dotenv.config();
+
+// Lazy-loaded tool instances
+let asanaTool: ReturnType<typeof createAsanaTool> | null = null;
+let plannerTool: ReturnType<typeof createPlannerTool> | null = null;
+
+function getAsanaTool() {
+  if (!asanaTool) {
+    asanaTool = createAsanaTool();
+  }
+  return asanaTool;
 }
 
-export class WorkAssistantAgent {
-  private agent: Agent;
-  private asanaTool: ReturnType<typeof createAsanaTool>;
-  private plannerTool: ReturnType<typeof createPlannerTool>;
-  private config: AgentConfig;
+function getPlannerTool() {
+  if (!plannerTool) {
+    plannerTool = createPlannerTool();
+  }
+  return plannerTool;
+}
 
-  constructor(config: AgentConfig) {
-    this.config = config;
-    
-    // Initialize tools
-    this.asanaTool = createAsanaTool();
-    this.plannerTool = createPlannerTool();
+export const asanaCreateTask = tool({
+  name: "asana.createTask",
+  description: "Create a task in Asana with optional due date, assignee, section, and attachments.",
+  parameters: TaskInputSchema,
+  strict: true,
+  async execute(input: TaskInput) {
+    try {
+      const tool = getAsanaTool();
+      const taskUrl = await tool.createAsanaTask(input);
+      return JSON.stringify({ 
+        success: true, 
+        backend: "asana", 
+        taskUrl,
+        message: `Task "${input.title}" created successfully in Asana`
+      });
+    } catch (error) {
+      return JSON.stringify({ 
+        success: false, 
+        backend: "asana", 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        message: `Failed to create task "${input.title}" in Asana`
+      });
+    }
+  },
+});
 
-    // Initialize OpenAI agent
-    this.agent = new Agent({
-      apiKey: config.openaiApiKey,
-      model: 'gpt-4',
-      tools: [
-        {
-          name: 'asana.createTask',
-          description: 'Create a new task in Asana',
-          parameters: TaskInputSchema,
-          handler: this.createAsanaTask.bind(this),
-        },
-        {
-          name: 'planner.createTask',
-          description: 'Create a new task in Microsoft Planner',
-          parameters: TaskInputSchema,
-          handler: this.createPlannerTask.bind(this),
-        },
-      ],
-      instructions: `
+export const plannerCreateTask = tool({
+  name: "planner.createTask",
+  description: "Create a task in Microsoft Planner with optional due date, assignee, bucket (section), and attachments.",
+  parameters: TaskInputSchema,
+  strict: true,
+  async execute(input: TaskInput) {
+    try {
+      const tool = getPlannerTool();
+      const taskUrl = await tool.createPlannerTask(input);
+      return JSON.stringify({ 
+        success: true, 
+        backend: "planner", 
+        taskUrl,
+        message: `Task "${input.title}" created successfully in Planner`
+      });
+    } catch (error) {
+      return JSON.stringify({ 
+        success: false, 
+        backend: "planner", 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        message: `Failed to create task "${input.title}" in Planner`
+      });
+    }
+  },
+});
+
+// Simple backend selector (env-driven)
+function pickBackend(): "asana" | "planner" {
+  const hasAsana = !!process.env.ASANA_TOKEN && !!process.env.ASANA_PROJECT;
+  const hasPlanner = !!process.env.GRAPH_TOKEN && !!process.env.PLANNER_PLAN;
+  
+  if (hasAsana) return "asana";
+  if (hasPlanner) return "planner";
+  return "asana"; // default fallback
+}
+
+export const assistant = new Agent({
+  name: "Work Intake Assistant",
+  instructions: `
 You are a personal AI assistant that helps create tasks in project management tools.
-Your job is to:
 
+Your job is to:
 1. Parse natural language task descriptions from emails or dictation
 2. Extract structured information (title, description, due date, assignee, etc.)
 3. Create tasks in either Asana or Microsoft Planner based on context or user preference
@@ -52,7 +103,7 @@ Your job is to:
 
 Guidelines:
 - Always validate input data using the provided schema
-- If no platform is specified, use ${config.defaultPlatform || 'asana'} as default
+- If no platform is specified, use ${pickBackend()} as default
 - Extract due dates from natural language (e.g., "next Friday", "tomorrow", "in 3 days")
 - Clean up email signatures and quoted text from descriptions
 - Map assignee names to appropriate user IDs
@@ -64,101 +115,60 @@ When creating tasks:
 - Include relevant context in descriptions
 - Add links and attachments to task notes
 - Return the task URL for user reference
-      `,
-    });
-  }
+  `,
+  tools: [asanaCreateTask, plannerCreateTask],
+});
 
-  /**
-   * Process natural language input and create appropriate tasks
-   */
-  async processTaskRequest(input: string, platform?: 'asana' | 'planner'): Promise<string> {
-    try {
-      // Parse the input text into structured data
-      const parsedInput = parseTaskInput(input);
-      
-      // Validate the parsed input
-      const validatedInput = TaskInputSchema.parse(parsedInput);
+// Convenience helper for webhook handlers
+export async function handleTextToTask(text: string, platform?: "asana" | "planner") {
+  try {
+    const backend = platform || pickBackend();
+    
+    // Create a simple prompt for the agent
+    const prompt = `Create a task from this description: "${text}"`;
+    
+    // Run the agent with the prompt using the run function
+    const result = await run(assistant, prompt);
 
-      // Determine which platform to use
-      const targetPlatform = platform || this.config.defaultPlatform || 'asana';
+    // Extract task URL from the result
+    let taskUrl: string | null = null;
+    let success = false;
+    let message = "Task processing completed";
 
-      // Create the task using the appropriate tool
-      let taskUrl: string;
-      if (targetPlatform === 'asana') {
-        taskUrl = await this.createAsanaTask(validatedInput);
-      } else {
-        taskUrl = await this.createPlannerTask(validatedInput);
+    // Look for tool call results in the agent's output
+    if (result.newItems) {
+      for (const item of result.newItems) {
+        if (item.type === "tool_call_output_item") {
+          try {
+            const toolResult = JSON.parse(item.output as string);
+            if (toolResult?.taskUrl) {
+              taskUrl = toolResult.taskUrl;
+              success = toolResult.success || true;
+              message = toolResult.message || message;
+              break;
+            }
+          } catch (parseError) {
+            console.warn('Failed to parse tool result:', parseError);
+          }
+        }
       }
-
-      return taskUrl;
-    } catch (error) {
-      console.error('Error processing task request:', error);
-      throw new Error(`Failed to process task request: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }
 
-  /**
-   * Create a task in Asana
-   */
-  private async createAsanaTask(input: TaskInput): Promise<string> {
-    try {
-      console.log('Creating Asana task:', input.title);
-      const taskUrl = await this.asanaTool.createAsanaTask(input);
-      console.log('Asana task created:', taskUrl);
-      return taskUrl;
-    } catch (error) {
-      console.error('Error creating Asana task:', error);
-      throw new Error(`Failed to create Asana task: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Create a task in Microsoft Planner
-   */
-  private async createPlannerTask(input: TaskInput): Promise<string> {
-    try {
-      console.log('Creating Planner task:', input.title);
-      const taskUrl = await this.plannerTool.createPlannerTask(input);
-      console.log('Planner task created:', taskUrl);
-      return taskUrl;
-    } catch (error) {
-      console.error('Error creating Planner task:', error);
-      throw new Error(`Failed to create Planner task: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Get agent status and configuration
-   */
-  getStatus(): { status: string; platforms: string[]; defaultPlatform: string } {
-    return {
-      status: 'ready',
-      platforms: ['asana', 'planner'],
-      defaultPlatform: this.config.defaultPlatform || 'asana',
+    return { 
+      success, 
+      backend, 
+      taskUrl, 
+      message,
+      raw: result 
+    };
+  } catch (error) {
+    console.error('Error in handleTextToTask:', error);
+    return { 
+      success: false, 
+      backend: pickBackend(), 
+      taskUrl: null, 
+      message: `Error processing task: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error: error instanceof Error ? error.message : 'Unknown error'
     };
   }
-
-  /**
-   * Test the agent with a sample request
-   */
-  async testAgent(): Promise<string> {
-    const testInput = 'Follow up with shipping department by next Friday';
-    return await this.processTaskRequest(testInput);
-  }
-}
-
-/**
- * Create an instance of WorkAssistantAgent with environment configuration
- */
-export function createWorkAssistantAgent(): WorkAssistantAgent {
-  const config: AgentConfig = {
-    openaiApiKey: process.env.OPENAI_API_KEY || '',
-    defaultPlatform: (process.env.DEFAULT_PLATFORM as 'asana' | 'planner') || 'asana',
-  };
-
-  if (!config.openaiApiKey) {
-    throw new Error('Missing required configuration: OPENAI_API_KEY must be set');
-  }
-
-  return new WorkAssistantAgent(config);
 }

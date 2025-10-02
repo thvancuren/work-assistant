@@ -75,7 +75,7 @@ export class PlannerTool {
         throw new Error(`Microsoft Graph API error: ${response.status} - ${JSON.stringify(errorData)}`);
       }
 
-      const task: PlannerTask = await response.json();
+      const task = await response.json() as PlannerTask;
 
       // Add description and links as task details if provided
       if (input.description || (input.links && input.links.length > 0)) {
@@ -162,7 +162,7 @@ export class PlannerTool {
         throw new Error(`Failed to get plan buckets: ${response.status}`);
       }
 
-      const result: GraphResponse<any[]> = await response.json();
+      const result = await response.json() as GraphResponse<any[]>;
       return result.value || [];
     } catch (error) {
       console.error('Error getting Planner buckets:', error);
@@ -185,7 +185,7 @@ export class PlannerTool {
         throw new Error(`Failed to get plan tasks: ${response.status}`);
       }
 
-      const result: GraphResponse<any[]> = await response.json();
+      const result = await response.json() as GraphResponse<any[]>;
       return result.value || [];
     } catch (error) {
       console.error('Error getting Planner tasks:', error);

@@ -40,3 +40,15 @@ coverage/
 
 # TypeScript cache
 *.tsbuildinfo
+
+# Test files
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+test/
+tests/
+
+# Temporary files
+*.tmp
+*.temp
