@@ -74,15 +74,19 @@ app.post("/intake", async (req: Request, res: Response) => {
 
 // --- Boot the server ---
 const PORT = Number(process.env.PORT || 3000);
-app.listen(PORT, () => {
-  console.log(`Webhook listening on http://localhost:${PORT}`);
-  const asanaReady = !!process.env.ASANA_TOKEN && !!process.env.ASANA_PROJECT;
-  const plannerReady =
-    !!process.env.GRAPH_TOKEN &&
-    !!process.env.PLANNER_PLAN &&
-    !!process.env.PLANNER_BUCKET;
-  console.log(`Asana configured: ${asanaReady} | Planner configured: ${plannerReady}`);
-});
+
+// Only start server if not in Vercel environment
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Webhook listening on http://localhost:${PORT}`);
+    const asanaReady = !!process.env.ASANA_TOKEN && !!process.env.ASANA_PROJECT;
+    const plannerReady =
+      !!process.env.GRAPH_TOKEN &&
+      !!process.env.PLANNER_PLAN &&
+      !!process.env.PLANNER_BUCKET;
+    console.log(`Asana configured: ${asanaReady} | Planner configured: ${plannerReady}`);
+  });
+}
 
 // (Optional) export app for unit/integration tests
 export default app;

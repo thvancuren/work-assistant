@@ -1,18 +1,14 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "dist/intake/webhook.js",
-      "use": "@vercel/node"
+  "functions": {
+    "api/index.js": {
+      "runtime": "nodejs18.x"
     }
-  ],
+  },
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "dist/intake/webhook.js"
+      "dest": "/api"
     }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  }
+  ]
 }
