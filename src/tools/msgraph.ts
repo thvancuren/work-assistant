@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import { TaskInput } from './parsers';
 
 interface GraphConfig {
